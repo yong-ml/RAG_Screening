@@ -19,8 +19,6 @@ data/jd/*.txt
 # ChromaDB (영속성 데이터, Git에 포함하지 않음)
 data/chroma_db/
 
-# Models (로컬 다운로드한 경우)
-models/
 
 # IDE
 .claude/
