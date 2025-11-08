@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from typing import List, Optional
+from typing import Optional
 import time
 import os
 from ..core.config import get_settings
@@ -8,7 +8,12 @@ from ..services.parser import ResumeParser
 from ..services.reranker import JinaRerankerService
 from ..services.llm import GeminiService
 from ..models.database import ChromaDBClient
-from ..schemas.response import ScreeningResponse, CandidateScore, ComparisonRequest, ComparisonResponse
+from ..schemas.response import (
+    ScreeningResponse,
+    CandidateScore,
+    ComparisonRequest,
+    ComparisonResponse,
+)
 
 router = APIRouter()
 
@@ -28,8 +33,8 @@ server_state = {
         "candidates": [],
         "job_description": "",
         "total_processed": 0,
-        "processing_time": 0
-    }
+        "processing_time": 0,
+    },
 }
 
 
@@ -38,7 +43,7 @@ async def screen_resumes(
     job_description: Optional[str] = Form(None),
     job_description_file: Optional[UploadFile] = File(None),
     top_n: int = Form(10),
-    resumes: Optional[List[UploadFile]] = File(None)
+    resumes: Optional[list[UploadFile]] = File(None),
 ):
     """
     3단계 AI 파이프라인:
@@ -61,8 +66,8 @@ async def screen_resumes(
             f.write(content)
 
         # 파일 확장자에 따라 텍스트 추출
-        if file_path.endswith('.txt'):
-            with open(file_path, 'r', encoding='utf-8') as f:
+        if file_path.endswith(".txt"):
+            with open(file_path, "r", encoding="utf-8") as f:
                 job_description = f.read()
         else:
             job_description = parser.parse_resume(file_path)
@@ -74,7 +79,9 @@ async def screen_resumes(
         # 기존 저장된 채용공고 사용
         job_description = server_state["job_description"]
     else:
-        raise HTTPException(status_code=400, detail="채용공고 텍스트 또는 파일이 필요합니다.")
+        raise HTTPException(
+            status_code=400, detail="채용공고 텍스트 또는 파일이 필요합니다."
+        )
 
     # 업로드 디렉토리가 없으면 생성
     os.makedirs(settings.upload_dir, exist_ok=True)
@@ -83,7 +90,10 @@ async def screen_resumes(
     if resumes:
         for resume_file in resumes:
             # 중복 체크 (파일명으로)
-            if any(r["filename"] == resume_file.filename for r in server_state["resume_files"]):
+            if any(
+                r["filename"] == resume_file.filename
+                for r in server_state["resume_files"]
+            ):
                 continue  # 이미 있는 파일은 스킵
 
             # 파일 저장
@@ -96,11 +106,9 @@ async def screen_resumes(
             text = parser.parse_resume(file_path)
 
             # server_state에 추가
-            server_state["resume_files"].append({
-                "filename": resume_file.filename,
-                "text": text,
-                "filepath": file_path
-            })
+            server_state["resume_files"].append(
+                {"filename": resume_file.filename, "text": text, "filepath": file_path}
+            )
 
     # 이력서가 하나도 없으면 에러
     if not server_state["resume_files"]:
@@ -131,15 +139,20 @@ async def screen_resumes(
         ids=resume_ids,
         embeddings=embeddings.tolist(),
         documents=resume_texts,
-        metadatas=[{"index": i, "filename": resume_filenames[i]} for i in range(len(resume_texts))]
+        metadatas=[
+            {"index": i, "filename": resume_filenames[i]}
+            for i in range(len(resume_texts))
+        ],
     )
 
     # 1차 필터링 (Top 50)
-    search_results = db.query(jd_embedding.tolist(), n_results=min(50, len(resume_texts)))
+    search_results = db.query(
+        jd_embedding.tolist(), n_results=min(50, len(resume_texts))
+    )
 
     # Stage 2: Jina Reranker
-    top_50_texts = search_results['documents'][0]
-    top_50_metadatas = search_results['metadatas'][0]
+    top_50_texts = search_results["documents"][0]
+    top_50_metadatas = search_results["metadatas"][0]
     reranked = reranker.rerank(job_description, top_50_texts, top_n=top_n)
 
     # Stage 3: Gemini 분석 (Top N만)
@@ -147,49 +160,50 @@ async def screen_resumes(
     for i, result in enumerate(reranked):
         # Jina reranker 결과 파싱
         # result는 {'index': int, 'relevance_score': float, 'document': {'text': str}}
-        doc_index = result.get('index', i)
-        score = result.get('relevance_score', 0.0)
+        doc_index = result.get("index", i)
+        score = result.get("relevance_score", 0.0)
 
         # 문서 텍스트 가져오기
-        if isinstance(result.get('document'), dict):
-            doc_text = result.get('document', {}).get('text', '')
+        if isinstance(result.get("document"), dict):
+            doc_text = result.get("document", {}).get("text", "")
         else:
             doc_text = top_50_texts[doc_index]
 
         # 메타데이터에서 파일명 가져오기
         try:
             metadata = top_50_metadatas[doc_index]
-            filename = metadata.get('filename', f'Candidate {i+1}')
-            name = filename.rsplit('.', 1)[0]  # 확장자 제거
-        except (IndexError, KeyError, AttributeError) as e:
+            filename = metadata.get("filename", f"Candidate {i+1}")
+            name = filename.rsplit(".", 1)[0]  # 확장자 제거
+        except (IndexError, KeyError, AttributeError):
             # 인덱스 오류 시 텍스트로 매칭 시도
             try:
                 # 텍스트 매칭으로 원본 찾기
                 for idx, text in enumerate(top_50_texts):
                     if text == doc_text:
-                        filename = top_50_metadatas[idx].get('filename', f'Candidate {i+1}')
-                        name = filename.rsplit('.', 1)[0]
+                        filename = top_50_metadatas[idx].get(
+                            "filename", f"Candidate {i+1}"
+                        )
+                        name = filename.rsplit(".", 1)[0]
                         break
                 else:
                     name = f"Candidate {i+1}"
             except:
                 name = f"Candidate {i+1}"
 
-        analysis = llm.analyze_candidate(
-            doc_text,
-            job_description
-        )
+        analysis = llm.analyze_candidate(doc_text, job_description)
 
-        candidates.append(CandidateScore(
-            name=name,
-            email=None,
-            score=score,
-            jina_score=score,
-            gemini_score=analysis.get('gemini_score', 0),
-            gemini_analysis=analysis['analysis'],
-            thinking_process=analysis['thinking_process'],
-            resume_text=doc_text
-        ))
+        candidates.append(
+            CandidateScore(
+                name=name,
+                email=None,
+                score=score,
+                jina_score=score,
+                gemini_score=analysis.get("gemini_score", 0),
+                gemini_analysis=analysis["analysis"],
+                thinking_process=analysis["thinking_process"],
+                resume_text=doc_text,
+            )
+        )
 
     processing_time = time.time() - start_time
 
@@ -198,14 +212,14 @@ async def screen_resumes(
         "candidates": candidates,
         "job_description": job_description,
         "total_processed": len(server_state["resume_files"]),
-        "processing_time": processing_time
+        "processing_time": processing_time,
     }
 
     return ScreeningResponse(
         top_candidates=candidates,
         total_processed=len(server_state["resume_files"]),
         processing_time=processing_time,
-        job_description=job_description
+        job_description=job_description,
     )
 
 
@@ -220,8 +234,12 @@ async def compare_candidates(request: ComparisonRequest):
     if not candidates:
         raise HTTPException(status_code=400, detail="먼저 스크리닝을 수행해주세요.")
 
-    if request.candidate1_index >= len(candidates) or request.candidate2_index >= len(candidates):
-        raise HTTPException(status_code=400, detail="유효하지 않은 지원자 인덱스입니다.")
+    if request.candidate1_index >= len(candidates) or request.candidate2_index >= len(
+        candidates
+    ):
+        raise HTTPException(
+            status_code=400, detail="유효하지 않은 지원자 인덱스입니다."
+        )
 
     candidate1 = candidates[request.candidate1_index]
     candidate2 = candidates[request.candidate2_index]
@@ -232,13 +250,13 @@ async def compare_candidates(request: ComparisonRequest):
         candidate1.resume_text,
         candidate2.name,
         candidate2.resume_text,
-        job_description
+        job_description,
     )
 
     return ComparisonResponse(
         candidate1_name=candidate1.name,
         candidate2_name=candidate2.name,
-        comparison=comparison_result['comparison']
+        comparison=comparison_result["comparison"],
     )
 
 
@@ -254,11 +272,21 @@ def get_state():
 
     return {
         "has_job_description": bool(server_state["job_description"]),
-        "job_description_preview": server_state["job_description"][:100] if server_state["job_description"] else "",
+        "job_description_preview": (
+            server_state["job_description"][:100]
+            if server_state["job_description"]
+            else ""
+        ),
         "resume_count": len(server_state["resume_files"]),
         "resume_filenames": [r["filename"] for r in server_state["resume_files"]],
-        "has_screening_result": bool(server_state["last_screening_result"]["candidates"]),
-        "screening_result": server_state["last_screening_result"] if server_state["last_screening_result"]["candidates"] else None
+        "has_screening_result": bool(
+            server_state["last_screening_result"]["candidates"]
+        ),
+        "screening_result": (
+            server_state["last_screening_result"]
+            if server_state["last_screening_result"]["candidates"]
+            else None
+        ),
     }
 
 

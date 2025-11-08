@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import Optional
 
 
 class CandidateScore(BaseModel):
@@ -14,7 +14,7 @@ class CandidateScore(BaseModel):
 
 
 class ScreeningResponse(BaseModel):
-    top_candidates: List[CandidateScore]
+    top_candidates: list[CandidateScore]
     total_processed: int
     processing_time: float
     job_description: str  # 비교를 위해 저장

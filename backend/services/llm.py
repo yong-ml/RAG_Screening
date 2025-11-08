@@ -1,18 +1,15 @@
-import google.generativeai as genai
-from typing import Dict
+from google import genai
 import re
 
 
 class GeminiService:
     def __init__(self, api_key: str):
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.5-pro')
+        self.client = genai.Client(api_key=api_key)
+        self.model_id = "gemini-2.0-flash-001"
 
     def analyze_candidate(
-        self,
-        resume_text: str,
-        job_description: str
-    ) -> Dict[str, str]:
+        self, resume_text: str, job_description: str
+    ) -> dict[str, str]:
         """Gemini로 후보자 분석"""
 
         prompt = f"""
@@ -43,22 +40,25 @@ class GeminiService:
 """
 
         try:
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=prompt
+            )
             analysis_text = response.text
 
             # 점수 추출
             score = self.extract_score(analysis_text)
 
             return {
-                'analysis': analysis_text,
-                'thinking_process': None,
-                'gemini_score': score
+                "analysis": analysis_text,
+                "thinking_process": None,
+                "gemini_score": score,
             }
         except Exception as e:
             return {
-                'analysis': f"분석 중 오류 발생: {str(e)}",
-                'thinking_process': None,
-                'gemini_score': 0
+                "analysis": f"분석 중 오류 발생: {str(e)}",
+                "thinking_process": None,
+                "gemini_score": 0,
             }
 
     def extract_score(self, analysis_text: str) -> int:
@@ -66,11 +66,11 @@ class GeminiService:
         # 패턴들: "점수: 92/100", "92/100", "점수: 92", "92점" 등
         # 마크다운 bold 마커(**) 고려
         patterns = [
-            r'점수[:\s*]*(\d+)\s*/\s*100',  # "점수:** 92/100" 형식
-            r'(\d+)\s*/\s*100',
-            r'점수[:\s*]*(\d+)점',  # "점수:** 92점" 형식 (bold 마커 포함)
-            r'총점[:\s*]*(\d+)\s*/\s*100',
-            r'총점[:\s*]*(\d+)점',  # "총점:** 55점" 형식
+            r"점수[:\s*]*(\d+)\s*/\s*100",  # "점수:** 92/100" 형식
+            r"(\d+)\s*/\s*100",
+            r"점수[:\s*]*(\d+)점",  # "점수:** 92점" 형식 (bold 마커 포함)
+            r"총점[:\s*]*(\d+)\s*/\s*100",
+            r"총점[:\s*]*(\d+)점",  # "총점:** 55점" 형식
         ]
 
         for pattern in patterns:
@@ -89,8 +89,8 @@ class GeminiService:
         candidate1_resume: str,
         candidate2_name: str,
         candidate2_resume: str,
-        job_description: str
-    ) -> Dict[str, str]:
+        job_description: str,
+    ) -> dict[str, str]:
         """두 지원자 비교 분석"""
 
         prompt = f"""
@@ -131,10 +131,6 @@ class GeminiService:
 
         try:
             response = self.model.generate_content(prompt)
-            return {
-                'comparison': response.text
-            }
+            return {"comparison": response.text}
         except Exception as e:
-            return {
-                'comparison': f"비교 분석 중 오류 발생: {str(e)}"
-            }
+            return {"comparison": f"비교 분석 중 오류 발생: {str(e)}"}

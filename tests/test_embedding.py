@@ -1,4 +1,3 @@
-import pytest
 from backend.services.embedding import EmbeddingService
 
 

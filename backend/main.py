@@ -5,7 +5,7 @@ from .api import routes
 app = FastAPI(
     title="AI Resume Screening API",
     version="1.0.0",
-    description="HR 담당자를 위한 AI 이력서 스크리닝 시스템"
+    description="HR 담당자를 위한 AI 이력서 스크리닝 시스템",
 )
 
 # CORS 설정 (Streamlit 연결용)
@@ -25,5 +25,5 @@ def root():
     return {
         "message": "AI Resume Screening API is running",
         "version": "1.0.0",
-        "docs": "/docs"
+        "docs": "/docs",
     }
