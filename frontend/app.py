@@ -7,8 +7,26 @@ st.set_page_config(page_title="AI Resume Screening", page_icon="📄", layout="w
 # 환경 설정
 API_URL = "http://localhost:8000/api/v1"
 
+# 기본 서버 상태
+DEFAULT_SERVER_STATE = {
+    "has_job_description": False,
+    "resume_count": 0,
+    "resume_filenames": [],
+    "has_screening_result": False,
+}
+
 st.title("🚀 AI Resume Screening System")
 st.markdown("HR 담당자를 위한 지능형 이력서 스크리닝 시스템")
+
+
+# 헬퍼 함수
+def clear_session_state():
+    """세션 상태 초기화"""
+    keys_to_remove = ["results", "candidates", "db_status"]
+    for key in keys_to_remove:
+        if key in st.session_state:
+            del st.session_state[key]
+
 
 # 서버 상태 로드 (앱 시작 시 1회)
 if "server_state_loaded" not in st.session_state:
@@ -33,19 +51,9 @@ if "server_state_loaded" not in st.session_state:
                 st.session_state["candidates"] = result["candidates"]
                 st.session_state["sort_method"] = "Jina Reranker 점수 (코사인 유사도)"
         else:
-            st.session_state["server_state"] = {
-                "has_job_description": False,
-                "resume_count": 0,
-                "resume_filenames": [],
-                "has_screening_result": False,
-            }
-    except:
-        st.session_state["server_state"] = {
-            "has_job_description": False,
-            "resume_count": 0,
-            "resume_filenames": [],
-            "has_screening_result": False,
-        }
+            st.session_state["server_state"] = DEFAULT_SERVER_STATE.copy()
+    except Exception:
+        st.session_state["server_state"] = DEFAULT_SERVER_STATE.copy()
 
     st.session_state["server_state_loaded"] = True
 
@@ -83,7 +91,65 @@ with st.sidebar:
         help="새 이력서를 추가하거나, 처음 업로드하세요.",
     )
 
-    analyze_button = st.button("🔍 분석 시작", type="primary", use_container_width=True)
+    analyze_button = st.button("🔍 분석 시작", type="primary", width="stretch")
+
+    # DB 상태 확인
+    st.divider()
+    st.subheader("🗄️ 데이터베이스")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("DB 상태", width="stretch"):
+            try:
+                db_response = httpx.get(f"{API_URL}/db-status", timeout=10.0)
+                if db_response.status_code == 200:
+                    db_data = db_response.json()
+
+                    st.metric("저장된 이력서", f"{db_data['total_count']}개")
+
+                    if db_data.get("has_duplicates"):
+                        st.error("⚠️ 중복 파일 발견!")
+                        for filename, count in db_data["duplicates"].items():
+                            st.warning(f"• {filename}: {count}개")
+                    elif db_data["total_count"] > 0:
+                        st.success("✓ 중복 없음")
+
+                    # 세션 스테이트에 저장하여 아래에 표시
+                    st.session_state["db_status"] = db_data
+            except Exception as e:
+                st.error(f"DB 조회 실패: {e}")
+
+    with col2:
+        if st.button("🗑️ DB 초기화", width="stretch", type="secondary"):
+            # 확인 다이얼로그를 위한 세션 상태
+            st.session_state["confirm_clear_db"] = True
+
+    # DB 초기화 확인
+    if st.session_state.get("confirm_clear_db"):
+        st.warning("⚠️ **경고**: 모든 이력서 데이터가 삭제됩니다!")
+        col_yes, col_no = st.columns(2)
+
+        with col_yes:
+            if st.button("✅ 확인", width="stretch"):
+                try:
+                    clear_response = httpx.post(f"{API_URL}/clear-db", timeout=10.0)
+                    if clear_response.status_code == 200:
+                        st.success("✅ 데이터베이스가 초기화되었습니다.")
+                        # 세션 상태도 초기화
+                        clear_session_state()
+                        st.session_state["confirm_clear_db"] = False
+                        st.rerun()
+                    else:
+                        st.error(f"초기화 실패: {clear_response.text}")
+                except Exception as e:
+                    st.error(f"초기화 실패: {e}")
+                st.session_state["confirm_clear_db"] = False
+
+        with col_no:
+            if st.button("❌ 취소", width="stretch"):
+                st.session_state["confirm_clear_db"] = False
+                st.rerun()
 
 
 def show_input_status(server_state):
@@ -184,7 +250,7 @@ def show_results(results, candidates, current_sort_method, server_state):
 
             df = pd.DataFrame(df_data)
 
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)
 
         # Tab 2: 비교 화면
         with tab2:
@@ -246,6 +312,32 @@ def show_results(results, candidates, current_sort_method, server_state):
                 st.markdown(
                     f"## 🆚 {comparison['candidate1_name']} vs {comparison['candidate2_name']}"
                 )
+
+                # 점수 비교 표시
+                col_score1, col_score2 = st.columns(2)
+
+                with col_score1:
+                    st.markdown(f"### {comparison['candidate1_name']}")
+                    st.metric(
+                        "Jina 매칭 점수", f"{comparison['candidate1_jina_score']:.3f}"
+                    )
+                    st.metric(
+                        "Gemini 평가 점수",
+                        f"{comparison['candidate1_gemini_score']}/100",
+                    )
+
+                with col_score2:
+                    st.markdown(f"### {comparison['candidate2_name']}")
+                    st.metric(
+                        "Jina 매칭 점수", f"{comparison['candidate2_jina_score']:.3f}"
+                    )
+                    st.metric(
+                        "Gemini 평가 점수",
+                        f"{comparison['candidate2_gemini_score']}/100",
+                    )
+
+                st.markdown("---")
+                st.markdown("### 📊 AI 비교 분석")
                 st.markdown(comparison["comparison"])
 
             # 개별 지원자 상세 정보
@@ -253,8 +345,12 @@ def show_results(results, candidates, current_sort_method, server_state):
             st.subheader("개별 지원자 상세 분석")
             for i, candidate in enumerate(candidates[:5]):
                 with st.expander(
-                    f"🏆 {i+1}순위: {candidate['name']} (Jina: {candidate['jina_score']:.3f}, Gemini: {candidate['gemini_score']}점)"
+                    f"🏆 {i + 1}순위: {candidate['name']} (Jina: {candidate['jina_score']:.3f}, Gemini: {candidate['gemini_score']}점)"
                 ):
+                    if candidate.get("jina_reasoning"):
+                        st.info(f"💡 **Jina 매칭 근거**: {candidate['jina_reasoning']}")
+                        st.markdown("---")
+                    st.markdown("#### 📊 상세 분석 (Gemini)")
                     st.markdown(candidate["gemini_analysis"])
 
         # Tab 3: 추천 근거 (정렬 기준에 따라 변경)
@@ -262,7 +358,7 @@ def show_results(results, candidates, current_sort_method, server_state):
             st.subheader(f"AI 추천 근거 ({sort_method} 기준)")
 
             for i, candidate in enumerate(candidates[:3]):
-                st.markdown(f"### 🏆 {i+1}순위: {candidate['name']}")
+                st.markdown(f"### 🏆 {i + 1}순위: {candidate['name']}")
 
                 # 정렬 기준에 따라 강조하는 점수 변경
                 if sort_method == "Gemini AI 평가 점수 (100점)":
@@ -272,14 +368,20 @@ def show_results(results, candidates, current_sort_method, server_state):
                     st.markdown(
                         f"**Jina Reranker 점수**: {candidate['jina_score']:.4f}"
                     )
+                    if candidate.get("jina_reasoning"):
+                        st.info(f"💡 **Jina 매칭 근거**: {candidate['jina_reasoning']}")
                 else:
                     st.markdown(
                         f"**🎯 Jina Reranker 점수**: {candidate['jina_score']:.4f}"
                     )
+                    if candidate.get("jina_reasoning"):
+                        st.info(f"💡 **Jina 매칭 근거**: {candidate['jina_reasoning']}")
                     st.markdown(
                         f"**Gemini 평가 점수**: {candidate['gemini_score']}/100"
                     )
 
+                st.markdown("---")
+                st.markdown("#### 📊 상세 분석 (Gemini)")
                 st.markdown(candidate["gemini_analysis"])
 
                 if candidate.get("thinking_process"):
@@ -331,7 +433,7 @@ if analyze_button:
                     f"{API_URL}/screen",
                     files=files if files else None,
                     data=data,
-                    timeout=300.0,
+                    timeout=600.0,  # 10분 (30개 이력서 처리 시 Gemini API 호출이 여러 번 발생)
                 )
 
                 if response.status_code == 200:
@@ -351,7 +453,7 @@ if analyze_button:
                         state_response = httpx.get(f"{API_URL}/state", timeout=10.0)
                         if state_response.status_code == 200:
                             st.session_state["server_state"] = state_response.json()
-                    except:
+                    except Exception:
                         pass
 
                     st.success(
@@ -392,6 +494,34 @@ else:
     2. 이력서 파일(PDF/DOCX)을 업로드하세요
     3. **분석 시작** 버튼을 클릭하세요
 
-    💡 **Tip**: 한 번 입력한 채용공고와 이력서는 서버가 재시작되기 전까지 저장됩니다!
+    💡 **Tip**: 한 번 입력한 채용공고와 이력서는 DB에 저장됩니다!
     """
     )
+
+# DB 상태 상세 정보 표시 (사이드바에서 버튼 클릭 시)
+if "db_status" in st.session_state and st.session_state["db_status"]:
+    db_data = st.session_state["db_status"]
+
+    st.markdown("---")
+    st.markdown("## 🗄️ ChromaDB 상태")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("전체 이력서 수", f"{db_data['total_count']}개")
+    with col2:
+        status = "✓ 정상" if not db_data.get("has_duplicates") else "⚠️ 중복 있음"
+        st.metric("상태", status)
+
+    if db_data["total_count"] > 0:
+        st.markdown("### 📋 저장된 이력서 목록")
+
+        # DataFrame으로 표시
+        df = pd.DataFrame(db_data["items"])
+        df.index = df.index + 1  # 1부터 시작
+        df.columns = ["ID", "파일명", "문서 길이 (chars)"]
+
+        st.dataframe(
+            df,
+            width="stretch",
+            hide_index=False,
+        )
