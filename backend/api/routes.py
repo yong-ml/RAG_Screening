@@ -404,15 +404,20 @@ async def compare_candidates(request: ComparisonRequest):
     if not candidates:
         raise HTTPException(status_code=400, detail="먼저 스크리닝을 수행해주세요.")
 
-    if request.candidate1_index >= len(candidates) or request.candidate2_index >= len(
-        candidates
-    ):
-        raise HTTPException(
-            status_code=400, detail="유효하지 않은 지원자 인덱스입니다."
-        )
+    # 이름으로 지원자 찾기
+    candidate1 = None
+    candidate2 = None
 
-    candidate1 = candidates[request.candidate1_index]
-    candidate2 = candidates[request.candidate2_index]
+    for candidate in candidates:
+        if candidate.name == request.candidate1_name:
+            candidate1 = candidate
+        if candidate.name == request.candidate2_name:
+            candidate2 = candidate
+
+    if not candidate1 or not candidate2:
+        raise HTTPException(
+            status_code=400, detail="유효하지 않은 지원자 이름입니다."
+        )
 
     # 두 지원자 비교
     comparison_result = llm.compare_candidates(

@@ -259,18 +259,18 @@ def show_results(results, candidates, current_sort_method, server_state):
             col1, col2, col3 = st.columns([2, 2, 1])
 
             with col1:
-                candidate1_idx = st.selectbox(
+                candidate1_name = st.selectbox(
                     "지원자 1",
-                    range(len(candidates)),
-                    format_func=lambda i: f"{candidates[i]['name']} (Gemini: {candidates[i]['gemini_score']}점)",
+                    [c["name"] for c in candidates],
+                    format_func=lambda name: f"{name} (Gemini: {next(c['gemini_score'] for c in candidates if c['name'] == name)}점)",
                     key="candidate1_select",
                 )
 
             with col2:
-                candidate2_idx = st.selectbox(
+                candidate2_name = st.selectbox(
                     "지원자 2",
-                    range(len(candidates)),
-                    format_func=lambda i: f"{candidates[i]['name']} (Gemini: {candidates[i]['gemini_score']}점)",
+                    [c["name"] for c in candidates],
+                    format_func=lambda name: f"{name} (Gemini: {next(c['gemini_score'] for c in candidates if c['name'] == name)}점)",
                     index=1 if len(candidates) > 1 else 0,
                     key="candidate2_select",
                 )
@@ -285,15 +285,15 @@ def show_results(results, candidates, current_sort_method, server_state):
                 st.session_state["comparison_result"] = None
 
             if compare_button:
-                if candidate1_idx == candidate2_idx:
+                if candidate1_name == candidate2_name:
                     st.warning("다른 지원자를 선택하세요!")
                 else:
                     with st.spinner("AI가 두 지원자를 비교 분석 중입니다..."):
                         compare_response = httpx.post(
                             f"{API_URL}/compare",
                             json={
-                                "candidate1_index": candidate1_idx,
-                                "candidate2_index": candidate2_idx,
+                                "candidate1_name": candidate1_name,
+                                "candidate2_name": candidate2_name,
                             },
                             timeout=120.0,
                         )

@@ -22,8 +22,8 @@ class ScreeningResponse(BaseModel):
 
 
 class ComparisonRequest(BaseModel):
-    candidate1_index: int
-    candidate2_index: int
+    candidate1_name: str
+    candidate2_name: str
 
 
 class ComparisonResponse(BaseModel):
