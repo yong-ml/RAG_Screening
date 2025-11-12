@@ -307,7 +307,7 @@ async def screen_resumes(
     # 채용공고 임베딩 생성 (매번 새로 생성)
     jd_embedding = embedding_service.encode_query(job_description)
 
-    # 1차 필터링 (Top 10) - ChromaDB에 저장된 전체 이력서 대상
+    # 1차 필터링 (Top 50) - ChromaDB에 저장된 전체 이력서 대상
     total_resumes = len(server_state["resume_files"])
     search_results = db.query(jd_embedding.tolist(), n_results=min(50, total_resumes))
 
@@ -415,9 +415,7 @@ async def compare_candidates(request: ComparisonRequest):
             candidate2 = candidate
 
     if not candidate1 or not candidate2:
-        raise HTTPException(
-            status_code=400, detail="유효하지 않은 지원자 이름입니다."
-        )
+        raise HTTPException(status_code=400, detail="유효하지 않은 지원자 이름입니다.")
 
     # 두 지원자 비교
     comparison_result = llm.compare_candidates(
