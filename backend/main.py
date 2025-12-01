@@ -1,6 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import routes
+from .core.config import get_settings
+
+from .core.database import engine, Base
+from .models import sql  # Import models to register them with Base
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="AI Resume Screening API",
@@ -17,7 +23,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(routes.router, prefix="/api/v1", tags=["screening"])
+from .api.endpoints import candidates, screening, system
+
+app.include_router(screening.router, prefix="/api/v1", tags=["screening"])
+app.include_router(candidates.router, prefix="/api/v1", tags=["candidates"])
+app.include_router(system.router, prefix="/api/v1", tags=["system"])
 
 
 @app.get("/")
