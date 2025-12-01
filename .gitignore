@@ -12,9 +12,7 @@ __pycache__/
 .env.local
 
 # Data
-data/resumes/*.pdf
-data/resumes/*.docx
-data/jd/*.txt
+data/
 
 # ChromaDB (영속성 데이터, Git에 포함하지 않음)
 data/chroma_db/
@@ -33,3 +31,10 @@ Thumbs.db
 
 # Test files
 nul
+
+# Docker
+.Dockerfile
+
+# Cache
+.pytest_cache
+.ruff_cache
