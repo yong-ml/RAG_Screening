@@ -12,6 +12,7 @@ class CandidateScore(BaseModel):
     gemini_analysis: str
     thinking_process: Optional[str]
     resume_text: Optional[str] = None  # 비교를 위해 저장
+    filename: Optional[str] = None  # 이력서 파일명
 
 
 class ScreeningResponse(BaseModel):
@@ -34,3 +35,16 @@ class ComparisonResponse(BaseModel):
     candidate1_gemini_score: int
     candidate2_gemini_score: int
     comparison: str
+
+
+class ScreeningInitResponse(BaseModel):
+    session_id: int
+    message: str
+
+
+class ScreeningStatusResponse(BaseModel):
+    session_id: int
+    status: str
+    total_processed: int
+    processed_count: int
+    result: Optional[ScreeningResponse] = None
